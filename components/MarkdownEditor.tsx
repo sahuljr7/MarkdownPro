@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Copy, Download, Upload, FileText, Eye, Code, Trash2, Sun, Moon, Columns2 as Columns, Rows2 as Rows, BookOpen, FileCode } from 'lucide-react';
 import { saveAs } from 'file-saver';
+import { Document, Packer, Paragraph, HeadingLevel, TextRun, Table, TableCell, TableRow, BorderStyle, convertInchesToTwip } from 'docx';
 
 const SAMPLE_MARKDOWN = `# Markdown to Rich Text Converter
 
@@ -157,6 +158,148 @@ export default function MarkdownEditor() {
     });
   }, [markdown, toast]);
 
+  const parseMarkdownToParagraphs = (md: string) => {
+    const lines = md.split('\n');
+    const paragraphs: Paragraph[] = [];
+    let i = 0;
+
+    while (i < lines.length) {
+      const line = lines[i];
+
+      if (line.startsWith('# ')) {
+        paragraphs.push(new Paragraph({
+          text: line.replace('# ', ''),
+          heading: HeadingLevel.HEADING_1,
+          spacing: { after: 200 },
+        }));
+      } else if (line.startsWith('## ')) {
+        paragraphs.push(new Paragraph({
+          text: line.replace('## ', ''),
+          heading: HeadingLevel.HEADING_2,
+          spacing: { after: 200 },
+        }));
+      } else if (line.startsWith('### ')) {
+        paragraphs.push(new Paragraph({
+          text: line.replace('### ', ''),
+          heading: HeadingLevel.HEADING_3,
+          spacing: { after: 200 },
+        }));
+      } else if (line.startsWith('- ') || line.startsWith('* ')) {
+        while (i < lines.length && (lines[i].startsWith('- ') || lines[i].startsWith('* '))) {
+          paragraphs.push(new Paragraph({
+            text: lines[i].replace(/^[-*] /, ''),
+            spacing: { after: 100 },
+            indent: { left: 720 },
+            bullet: { level: 0 },
+          }));
+          i++;
+        }
+        continue;
+      } else if (line.match(/^\d+\. /)) {
+        while (i < lines.length && lines[i].match(/^\d+\. /)) {
+          paragraphs.push(new Paragraph({
+            text: lines[i].replace(/^\d+\. /, ''),
+            spacing: { after: 100 },
+            indent: { left: 720 },
+          }));
+          i++;
+        }
+        continue;
+      } else if (line.startsWith('```')) {
+        let codeBlock = '';
+        i++;
+        while (i < lines.length && !lines[i].startsWith('```')) {
+          codeBlock += lines[i] + '\n';
+          i++;
+        }
+        paragraphs.push(new Paragraph({
+          text: codeBlock.trim(),
+          spacing: { after: 200 },
+          shading: { fill: 'E8E8E8' },
+        }));
+      } else if (line.startsWith('> ')) {
+        paragraphs.push(new Paragraph({
+          text: line.replace('> ', ''),
+          spacing: { after: 200 },
+          border: {
+            left: {
+              color: '999999',
+              space: 1,
+              style: BorderStyle.SINGLE,
+              size: 12,
+            },
+          },
+          children: [
+            new TextRun({
+              text: line.replace('> ', ''),
+              italics: true,
+            }),
+          ],
+        }));
+      } else if (line.trim() !== '') {
+        const cleanText = line
+          .replace(/\*\*(.*?)\*\*/g, '$1')
+          .replace(/\*(.*?)\*/g, '$1')
+          .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+          .replace(/~~(.*?)~~/g, '$1');
+
+        paragraphs.push(new Paragraph({
+          text: cleanText,
+          spacing: { after: 200 },
+        }));
+      }
+
+      i++;
+    }
+
+    return paragraphs;
+  };
+
+  const handleExportDocx = useCallback(async () => {
+    try {
+      const doc = new Document({
+        sections: [{
+          children: parseMarkdownToParagraphs(markdown),
+        }],
+      });
+
+      const blob = await Packer.toBlob(doc);
+      saveAs(blob, 'document.docx');
+      toast({
+        title: 'Exported!',
+        description: 'Word document downloaded',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to export Word document',
+        variant: 'destructive',
+      });
+    }
+  }, [markdown, toast]);
+
+  const handleExportPDF = useCallback(() => {
+    try {
+      const html = convertMarkdownToHTML(markdown);
+      const printWindow = window.open('', '', 'width=800,height=600');
+      if (printWindow) {
+        printWindow.document.write(html);
+        printWindow.document.close();
+        printWindow.print();
+      }
+      toast({
+        title: 'Print dialog opened',
+        description: 'Select "Save as PDF" to export',
+      });
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: 'Failed to open print dialog',
+        variant: 'destructive',
+      });
+    }
+  }, [markdown, toast]);
+
   const handleDownloadMarkdown = useCallback(() => {
     const blob = new Blob([markdown], { type: 'text/markdown' });
     saveAs(blob, 'document.md');
@@ -272,6 +415,14 @@ export default function MarkdownEditor() {
               <Button variant="outline" size="sm" onClick={handleExportHTML}>
                 <Code className="w-4 h-4 mr-2" />
                 HTML
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleExportDocx}>
+                <FileText className="w-4 h-4 mr-2" />
+                DOCX
+              </Button>
+              <Button variant="outline" size="sm" onClick={handleExportPDF}>
+                <Download className="w-4 h-4 mr-2" />
+                PDF
               </Button>
               <Button
                 variant="outline"
