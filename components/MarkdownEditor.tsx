@@ -158,6 +158,25 @@ export default function MarkdownEditor() {
     });
   }, [markdown, toast]);
 
+  const cleanMarkdownText = (text: string): string => {
+    return text
+      .replace(/^#+\s+/gm, '')
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\*(.*?)\*/g, '$1')
+      .replace(/__(.*?)__/g, '$1')
+      .replace(/_(.+?)_/g, '$1')
+      .replace(/~~(.*?)~~/g, '$1')
+      .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+      .replace(/!\[(.*?)\]\(.*?\)/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/^[-*+]\s+/gm, '')
+      .replace(/^\d+\.\s+/gm, '')
+      .replace(/^>\s+/gm, '')
+      .replace(/^```[\s\S]*?```/gm, (match) => match.split('\n').slice(1, -1).join('\n'))
+      .replace(/\|(.+?)\|/g, '$1')
+      .trim();
+  };
+
   const parseMarkdownToParagraphs = (md: string) => {
     const lines = md.split('\n');
     const paragraphs: Paragraph[] = [];
@@ -167,27 +186,31 @@ export default function MarkdownEditor() {
       const line = lines[i];
 
       if (line.startsWith('# ')) {
+        const cleanedText = cleanMarkdownText(line.replace('# ', ''));
         paragraphs.push(new Paragraph({
-          text: line.replace('# ', ''),
+          text: cleanedText,
           heading: HeadingLevel.HEADING_1,
           spacing: { after: 200 },
         }));
       } else if (line.startsWith('## ')) {
+        const cleanedText = cleanMarkdownText(line.replace('## ', ''));
         paragraphs.push(new Paragraph({
-          text: line.replace('## ', ''),
+          text: cleanedText,
           heading: HeadingLevel.HEADING_2,
           spacing: { after: 200 },
         }));
       } else if (line.startsWith('### ')) {
+        const cleanedText = cleanMarkdownText(line.replace('### ', ''));
         paragraphs.push(new Paragraph({
-          text: line.replace('### ', ''),
+          text: cleanedText,
           heading: HeadingLevel.HEADING_3,
           spacing: { after: 200 },
         }));
       } else if (line.startsWith('- ') || line.startsWith('* ')) {
         while (i < lines.length && (lines[i].startsWith('- ') || lines[i].startsWith('* '))) {
+          const cleanedText = cleanMarkdownText(lines[i].replace(/^[-*] /, ''));
           paragraphs.push(new Paragraph({
-            text: lines[i].replace(/^[-*] /, ''),
+            text: cleanedText,
             spacing: { after: 100 },
             indent: { left: 720 },
             bullet: { level: 0 },
@@ -197,8 +220,9 @@ export default function MarkdownEditor() {
         continue;
       } else if (line.match(/^\d+\. /)) {
         while (i < lines.length && lines[i].match(/^\d+\. /)) {
+          const cleanedText = cleanMarkdownText(lines[i].replace(/^\d+\. /, ''));
           paragraphs.push(new Paragraph({
-            text: lines[i].replace(/^\d+\. /, ''),
+            text: cleanedText,
             spacing: { after: 100 },
             indent: { left: 720 },
           }));
@@ -212,14 +236,16 @@ export default function MarkdownEditor() {
           codeBlock += lines[i] + '\n';
           i++;
         }
+        const cleanedCode = cleanMarkdownText(codeBlock.trim());
         paragraphs.push(new Paragraph({
-          text: codeBlock.trim(),
+          text: cleanedCode,
           spacing: { after: 200 },
           shading: { fill: 'E8E8E8' },
         }));
       } else if (line.startsWith('> ')) {
+        const cleanedText = cleanMarkdownText(line.replace('> ', ''));
         paragraphs.push(new Paragraph({
-          text: line.replace('> ', ''),
+          text: cleanedText,
           spacing: { after: 200 },
           border: {
             left: {
@@ -231,20 +257,15 @@ export default function MarkdownEditor() {
           },
           children: [
             new TextRun({
-              text: line.replace('> ', ''),
+              text: cleanedText,
               italics: true,
             }),
           ],
         }));
       } else if (line.trim() !== '') {
-        const cleanText = line
-          .replace(/\*\*(.*?)\*\*/g, '$1')
-          .replace(/\*(.*?)\*/g, '$1')
-          .replace(/\[(.*?)\]\(.*?\)/g, '$1')
-          .replace(/~~(.*?)~~/g, '$1');
-
+        const cleanedText = cleanMarkdownText(line);
         paragraphs.push(new Paragraph({
-          text: cleanText,
+          text: cleanedText,
           spacing: { after: 200 },
         }));
       }
@@ -278,9 +299,29 @@ export default function MarkdownEditor() {
     }
   }, [markdown, toast]);
 
+  const convertMarkdownToPlainTextHTML = (md: string): string => {
+    const plainText = cleanMarkdownText(md)
+      .split('\n')
+      .map(line => `<p>${line.trim() ? line.replace(/</g, '&lt;').replace(/>/g, '&gt;') : '<br />'}</p>`)
+      .join('\n');
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; line-height: 1.6; padding: 2rem; max-width: 800px; margin: 0 auto; }
+    p { margin: 0.5em 0; }
+  </style>
+</head>
+<body>${plainText}</body>
+</html>`;
+  };
+
   const handleExportPDF = useCallback(() => {
     try {
-      const html = convertMarkdownToHTML(markdown);
+      const html = convertMarkdownToPlainTextHTML(markdown);
       const printWindow = window.open('', '', 'width=800,height=600');
       if (printWindow) {
         printWindow.document.write(html);
