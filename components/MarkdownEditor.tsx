@@ -173,7 +173,11 @@ export default function MarkdownEditor() {
       .replace(/^\d+\.\s+/gm, '')
       .replace(/^>\s+/gm, '')
       .replace(/^```[\s\S]*?```/gm, (match) => match.split('\n').slice(1, -1).join('\n'))
-      .replace(/\|(.+?)\|/g, '$1')
+      .replace(/^\s*\|[\s\-:|]+\|\s*$/gm, '')
+      .replace(/^\|(.+)\|$/gm, (match: string, content: string) => {
+        const cells = content.split('|').map((cell: string) => cell.trim()).filter(Boolean);
+        return cells.join(' | ').trim();
+      })
       .trim();
   };
 
